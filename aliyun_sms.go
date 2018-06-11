@@ -2,13 +2,12 @@ package aliyun_sms
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/goroom/rand"
+	"github.com/fwis/golib/srand"
 )
 
 type AliyunSms struct {
@@ -17,6 +16,13 @@ type AliyunSms struct {
 
 	SignName     string //签名名称
 	TemplateCode string //模板code
+}
+
+type SendResponse struct {
+	RequestId string
+	Code      string
+	Message   string
+	BizId     string
 }
 
 func NewAliyunSms(sign_name string, template_code string, access_key_id string, access_secret string) (*AliyunSms, error) {
@@ -29,7 +35,7 @@ func NewAliyunSms(sign_name string, template_code string, access_key_id string, 
 	return &a, nil
 }
 
-func (this *AliyunSms) Send(numbers string, params string) error {
+func (this *AliyunSms) Send(numbers string, params string) (*SendResponse, error) {
 	var request Request
 	request.Format = "JSON"
 	request.Version = "2017-05-25"
@@ -37,7 +43,8 @@ func (this *AliyunSms) Send(numbers string, params string) error {
 	request.SignatureMethod = "HMAC-SHA1"
 	request.Timestamp = time.Now().UTC().Format("2006-01-02T15:04:05Z")
 	request.SignatureVersion = "1.0"
-	request.SignatureNonce = rand.String(16, rand.RST_NUMBER|rand.RST_LOWER)
+	request.SignatureNonce = srand.RandUUID().Hex()
+	fmt.Printf("request.SignatureNonce=%#v\n", request.SignatureNonce)
 
 	request.Action = "SendSms"
 	request.SignName = this.SignName
@@ -51,24 +58,15 @@ func (this *AliyunSms) Send(numbers string, params string) error {
 	var err error
 	resp, err = http.Get(url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var b []byte
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_m := make(map[string](string))
-	err = json.Unmarshal(b, &_m)
-	if err != nil {
-		return err
-	}
-	message, ok := _m["Message"]
-	if ok && strings.ToUpper(message) == "OK" {
-		return nil
-	}
-	if ok {
-		return errors.New(message)
-	}
-	return errors.New("send sms error")
+	response := SendResponse{}
+	err = json.Unmarshal(b, &response)
+
+	return &response, err
 }
